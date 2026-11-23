@@ -151,9 +151,11 @@ function Engine.ComputeBreakeven(buyPriceCopper, itemID, tier)
   local totalCost = Engine.ComputeTotalCost(buyPriceCopper, itemID, tier)
   if not totalCost or totalCost <= 0 then return nil end
   local commission = Engine.GetCommissionRate(tier)
-  -- C4: precio mínimo de venta para ROI >= 15% (115 = 100% costo + 15% ROI; ceil
-  -- garantiza el umbral). math.ceil siempre produce entero representable.
-  return math.ceil(totalCost * 115 / (100 - commission))
+  -- O7: exactitud — el floor de ComputeNetRevenue puede dejar 1 cobre por debajo
+  -- del umbral. Calculamos el netRevenue mínimo (ceil de 1.15 * totalCost) y el
+  -- precio de venta mínimo que lo produce.
+  local minNetRevenue = math.ceil(totalCost * 115 / 100) -- ceil(1.15 * totalCost)
+  return math.ceil(minNetRevenue * 100 / (100 - commission))
 end
 
 -- ------------------------------------------------------------------

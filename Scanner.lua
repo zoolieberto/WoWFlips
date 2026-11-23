@@ -396,7 +396,13 @@ end
 function Scanner.OnBrowseResults(addedBrowseResults)
   local st = Scanner.state
   if not (st and st.running and st.mode == "category") then return end
-  local added = addedBrowseResults or (_G.C_AuctionHouse and _G.C_AuctionHouse.GetBrowseResults() or {})
+  local AH = _G.C_AuctionHouse
+  -- O9: el payload del evento puede no ser table (o nil); nunca hacer # sobre números.
+  local added = addedBrowseResults
+  if type(added) ~= "table" then
+    added = (AH and type(AH.GetBrowseResults) == "function" and AH.GetBrowseResults()) or {}
+  end
+  if type(added) ~= "table" then added = {} end
   local appended = 0
   for i = 1, #added do
     local r = added[i]

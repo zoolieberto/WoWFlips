@@ -38,7 +38,7 @@ function UI.Create()
   if UI.panel and UI.panel:IsObjectType("Frame") then return UI.panel end
   local parent = _G.AuctionHouseFrame
   if not parent then return nil end
-  UI.panel = CreateFrame("Frame", ADDON .. "Frame", parent)
+  UI.panel = CreateFrame("Frame", ADDON .. "Frame", parent, "BackdropTemplate") -- O8
   local panel = UI.panel
   panel:SetSize(590, 310)
   panel:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPLEFT", 5, -35)
@@ -243,14 +243,29 @@ function UI.OnBuyCommodityClick(btn)
   -- C2: precio unitario como 3er argumento (blueprint). En 12.x el precio se
   -- confirma vía COMMODITY_PRICE_UPDATED; el arg extra es ignorado por versiones
   -- que no lo aceptan, y requerido por las que sí.
-  pcall(C.StartCommoditiesPurchase, opp.itemID, opp.buyQty or 1, opp.buyPrice)
+  local ok = pcall(C.StartCommoditiesPurchase, opp.itemID, opp.buyQty or 1, opp.buyPrice)
+  -- O10: revelar explícitamente el botón Confirmar tras el primer clic.
+  if ok and btn.GetParent then
+    local row = btn:GetParent()
+    if row then
+      row.pendingConfirm = true
+      if row.btnConfirm then row.btnConfirm:Show() end
+    end
+  end
 end
 
 function UI.OnConfirmCommodityClick(btn)
   local opp = btn and btn.oppData
   local C = _G.C_AuctionHouse
   if not (opp and C and type(C.ConfirmCommoditiesPurchase) == "function") then return end
-  pcall(C.ConfirmCommoditiesPurchase, opp.itemID, opp.buyQty or 1, opp.buyPrice)
+  local ok = pcall(C.ConfirmCommoditiesPurchase, opp.itemID, opp.buyQty or 1, opp.buyPrice)
+  if ok and btn.GetParent then
+    local row = btn:GetParent()
+    if row then
+      row.pendingConfirm = false
+      if row.btnConfirm then row.btnConfirm:Hide() end
+    end
+  end
 end
 
 function UI.OnBuyItemBidClick(btn)
@@ -274,7 +289,8 @@ end
 function UI.OnRowLeave(row)
   if row then
     if row.btnBuy then row.btnBuy:Hide() end
-    if row.btnConfirm then row.btnConfirm:Hide() end
+    -- O10: con compra pendiente de confirmar, el botón Confirmar permanece visible.
+    if row.btnConfirm and not row.pendingConfirm then row.btnConfirm:Hide() end
   end
 end
 

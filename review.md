@@ -5,9 +5,9 @@
 ---
 
 ## 0. Estado General
-- **Última actualización:** 2026-11-23 (Iteración 2 — fixes C1-C5 + H6/H7/M3 aplicados)
-- **Fase actual:** Re-auditoría completada — APROBADO CON OBSERVACIONES
-- **Veredicto global:** APROBADO CON OBSERVACIONES (ver §7 Iteración 2)
+- **Última actualización:** 2026-11-23 (Iteración 3 — O7-O10 aplicadas)
+- **Fase actual:** O7-O10 aplicadas — pendiente verificación in-game (Acción 13) / re-auditoría
+- **Veredicto global:** APROBADO CON OBSERVACIONES (ver §7 Iteración 2) — O7-O10 resueltas en iteración 3
 
 ---
 
@@ -82,6 +82,7 @@ Checks extra del script:
 - Caso 4a: `Engine.GetConsensusPrice({{price=1,qty=1},{price=10000,qty=50}})` → `price=10000, baitExcluded=1, confidence=high` ✓ (respeta expectativa del blueprint).
 - Caso 4b: `Engine.GetConsensusPrice({{price=1,qty=100},{price=10000,qty=50}})` → `price=1, baitExcluded=0` ✓.
 - Overflow sanity: precios 2^31 → `totalCost=2147484098, roiBPS=-500` — sin overflow (Lua 5.1 double, < 2^53).
+- O7 (iteración 3): breakeven exacto `minNetRevenue = ceil(totalCost*115/100); breakeven = ceil(minNetRevenue*100/(100-commission))` → 10450/5%: minNetRevenue=12018, breakeven=12651, netRevenue=12018, ROI=1500 bps; 10000/15%: 11500 → 13530, ROI=1500; 10451/5%: 12019 → 12652, ROI=1500.
 
 ---
 
@@ -110,7 +111,7 @@ Checks extra del script:
 
 ### Caso 5 — GetItemInfo caché fría — Iteración 2 (2026-11-23)
 - **Resultado:** PASS
-- **Evidencia:** `Engine.GetFinancials` captura todos los returns con `local info = { GetItemInfo(itemID) }`; `if not info[1]` → `RequestItemLoad` (pcall `C_Item.RequestLoadItemDataByID`) → nil. Sin `select()` sobre un único valor. Diferidos: `ITEM_DATA_LOAD_RESULT` → `Scanner.OnItemDataLoad` usa `Engine.MakeItemKey(itemID)` fresca (M3) y reevalúa. Tooltip C5: `data.id` → `data.itemID` → `tooltip:GetItem()` (solo si `type == "number"`). C4 verificado numéricamente: `math.ceil(totalCost*115/(100-commission))` → totalCost=10450/comm 5% → breakeven=12650, ROI=1500 bps; totalCost=10000/comm 15% → 13530, ROI=1500 bps; totalCost=10451 → 12652 (ceiling garantiza >=1500). `vendorSellPrice=0`: depositPer=floor(0*15/100)=0; failed=2 → depositCost=0 → no crash.
+- **Evidencia:** `Engine.GetFinancials` captura todos los returns con `local info = { GetItemInfo(itemID) }`; `if not info[1]` → `RequestItemLoad` (pcall `C_Item.RequestLoadItemDataByID`) → nil. Sin `select()` sobre un único valor. Diferidos: `ITEM_DATA_LOAD_RESULT` → `Scanner.OnItemDataLoad` usa `Engine.MakeItemKey(itemID)` fresca (M3) y reevalúa. Tooltip C5: `data.id` → `data.itemID` → `tooltip:GetItem()` (solo si `type == "number"`). O7 (iteración 3) verificado numéricamente: `minNetRevenue = math.ceil(totalCost*115/100); breakeven = math.ceil(minNetRevenue*100/(100-commission))` → totalCost=10450/comm 5% → minNetRevenue=12018, breakeven=12651, netRevenue=12018, ROI=1500 bps; totalCost=10000/comm 15% → 11500 → 13530, ROI=1500; totalCost=10451/5% → 12019 → 12652, ROI=1500. `vendorSellPrice=0`: depositPer=floor(0*15/100)=0; failed=2 → depositCost=0 → no crash.
 - **Verificación:** estática + replicación numérica.
 
 ### Caso 6 — Repo GitHub limpio
@@ -161,6 +162,10 @@ Lista de ataques contra mi propia implementación y resultado:
 18. **Bait + quickly selling — buyPrice nil when all tiers bait.** GetConsensusPrice devuelve nil → no opp (reason no_consensus). PASS estática.
 19. **Bug — Engine.GetFinancials: `local info = GetItemInfo(itemID)` capturaba SOLO el primer return (itemName, string) → `tonumber(select(11, info))` siempre nil → `GetFinancials` siempre devolvía nil → ROI nunca calculado.** FIX: `local info = { GetItemInfo(itemID) }` (captura TODOS los returns; contrato select(11)/select(12)) + `info[11]/info[12]` + guard `if not info[1]` → defer + nil. Mismo fix en `Engine.IsCommodity` (heurística). Bug detectado en re-lectura de Engine.lua. PASS estática.
 20. **Bug — `break` sobre la misma línea sin separador.** Engine.lua:219 `if acc * 2 >= totalQty then median = tiers[i].price break end` → `; break` (Lua 5.1 exige separadores entre statements en la misma línea). FIX aplicado. PASS estática.
+21. **O7 — Breakeven exacto.** `minNetRevenue = ceil(totalCost*115/100)` + `ceil(minNetRevenue*100/(100-commission))`: 10450/5% → 12018/12651; 10000/15% → 11500/13530; 10451/5% → 12019/12652 — ROI neto 1500 bps en los 3 casos (contabiliza el floor de netRevenue). PASS.
+22. **O8 — BackdropTemplate.** `UI.panel` creado con `CreateFrame("Frame", ADDON .. "Frame", parent, "BackdropTemplate")`; `SetBackdrop`/`SetBackdropColor`/`SetBackdropBorderColor` válidos. PASS estático.
+23. **O9 — OnBrowseResults con payload no-table.** Guard `type(added) ~= "table"` → `GetBrowseResults() or {}` + guard final `{}`; nunca `#` sobre números. PASS estático.
+24. **O10 — Confirm visible tras Comprar.** `row.pendingConfirm = true` + `btnConfirm:Show()` tras Start exitoso; `OnRowLeave` conserva Confirm si pending; se oculta al confirmar. PASS estático.
 
 ---
 
@@ -263,10 +268,10 @@ Todas las acciones críticas y altas fueron aplicadas en el batch `fix: C1-C5 cr
 ### Verificación de interfaz — PARCIAL
 13. `## Interface: 120105` — verificado contra fuentes públicas (warcraft.wiki "Getting the current interface number": Retail 12.1.5 = 120105; wowlua API up-to-date PTR 12.1.5, Aug 28 2026). ⚠️ Pendiente `/dump (select(4, GetBuildInfo()))` en el cliente real del usuario — no disponible en este entorno.
 
-### Observaciones no bloqueantes para v0.2 (Iteración 2)
-14. **O7 — ComputeBreakeven precision**: formula `ceil(totalCost*115/(100-commission))` es aproximación (ignora floor en netRevenue). En algunos casos da 1 copper por debajo del umbral real. FIX: `ceil(ceil(totalCost*115/100)*100/(100-commission))` o loop acotado (máx ~2 iteraciones).
-15. **O8 — BackdropTemplate en UI.panel**: `UI.panel` se crea sin `"BackdropTemplate"` pero llama `SetBackdrop`/`SetBackdropColor`/`SetBackdropBorderColor`. En WoW 10.x+ esto puede causar crash. FIX: `CreateFrame("Frame", ADDON.."Frame", parent, "BackdropTemplate")`. Verificar en cliente.
-16. **O9 — OnBrowseResults defensivo**: si el evento pasa un número (no nil/table), `#added` provoca error. FIX: `if type(addedBrowseResults) ~= "table" then added = (AH.GetBrowseResults() or {}) end`.
-17. **O10 — Confirm button UX**: el botón Confirmar solo se muestra en hover (OnRowEnter). Mejorar: mostrarlo explícitamente tras clic en Comprar.
+### Observaciones no bloqueantes para v0.2 (Iteración 3 — COMPLETADAS)
+14. **O7 — ComputeBreakeven precision**: formula `ceil(totalCost*115/(100-commission))` es aproximación (ignora floor en netRevenue). En algunos casos da 1 copper por debajo del umbral real. FIX: `ceil(ceil(totalCost*115/100)*100/(100-commission))` o loop acotado (máx ~2 iteraciones). — ✅ COMPLETADA (iteración 3): `minNetRevenue = math.ceil(totalCost*115/100); return math.ceil(minNetRevenue*100/(100-commission))`; verificado 10450/5%→12651 (netRevenue 12018), 10000/15%→13530, 10451/5%→12652 — ROI 1500 bps en los 3 casos.
+15. **O8 — BackdropTemplate en UI.panel**: `UI.panel` se crea sin `"BackdropTemplate"` pero llama `SetBackdrop`/`SetBackdropColor`/`SetBackdropBorderColor`. En WoW 10.x+ esto puede causar crash. FIX: `CreateFrame("Frame", ADDON.."Frame", parent, "BackdropTemplate")`. Verificar en cliente. — ✅ COMPLETADA (iteración 3): `CreateFrame("Frame", ADDON .. "Frame", parent, "BackdropTemplate")`. Pendiente verificación in-game.
+16. **O9 — OnBrowseResults defensivo**: si el evento pasa un número (no nil/table), `#added` provoca error. FIX: `if type(addedBrowseResults) ~= "table" then added = (AH.GetBrowseResults() or {}) end`. — ✅ COMPLETADA (iteración 3): guard por tipo + fallback `GetBrowseResults() or {}` + guard final `{}`; nunca `#` sobre números.
+17. **O10 — Confirm button UX**: el botón Confirmar solo se muestra en hover (OnRowEnter). Mejorar: mostrarlo explícitamente tras clic en Comprar. — ✅ COMPLETADA (iteración 3): `row.pendingConfirm` + `btnConfirm:Show()` tras `StartCommoditiesPurchase` exitoso; `OnRowLeave` conserva Confirm si pending; se oculta tras confirmar.
 
 **Veredicto: APROBADO CON OBSERVACIONES.** El addon es funcional en estructura. Las observaciones O7-O10 son mejoras para v0.2. Verificación final requiere cliente WoW real (prueba in-game de SetBackdrop, Commodity flow, Browse flow).
