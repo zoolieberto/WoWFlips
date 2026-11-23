@@ -5,8 +5,8 @@
 ---
 
 ## 0. Estado General
-- **Última actualización:** 2026-11-23 (Iteración 3 — O7-O10 aplicadas y verificadas)
-- **Fase actual:** APROBADO — pendiente verificación in-game (O11)
+- **Última actualización:** 2026-11-23 (Iteración 4 — Interface 120105 → 16001 para WoW Forever)
+- **Fase actual:** APROBADO — instalado en _forever_ AddOns, pendiente verificación in-game
 - **Veredicto global:** APROBADO (ver §7 Iteración 3)
 
 ---
