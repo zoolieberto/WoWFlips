@@ -104,7 +104,14 @@ Checks extra del script:
 - **Verificación:** estática + replica de Engine.
 
 ### Caso 6 — Repo GitHub limpio
-- **Resultado:** PENDIENTE → ejecución en git (comandos §8). Evidencia pendiente: `git status`/`git ls-files` outputs.
+- **Resultado:** PASS
+- **Evidencia:**
+  - `git ls-files` → 9 archivos: `.gitignore`, `Core.lua`, `Engine.lua`, `README.md`, `Scanner.lua`, `Tooltip.lua`, `UI.lua`, `WoWFlips.toc`, `review.md` (ningún `WTF/`, `.bak`, `.tmp`).
+  - `git status --short` → vacío (workdir limpio).
+  - `git ls-files | Select-String -Pattern "WTF"` → 0 matches.
+  - `gh repo view WoWFlips --json name,url,visibility,nameWithOwner` → `{"name":"WoWFlips","nameWithOwner":"zoolieberto/WoWFlips","url":"https://github.com/zoolieberto/WoWFlips","visibility":"PUBLIC"}`
+  - Commit inicial: `164aef1 chore: initial WoWFlips addon scaffold — 9 files changed, 1513 insertions(+)`.
+  - `.gitignore` cumple blueprint (WTF/, *.bak, *.tmp, *.log, .DS_Store, Thumbs.db, .vscode/, .idea/).
 
 ---
 
@@ -112,10 +119,10 @@ Checks extra del script:
 
 1. **Detección de AH neutro heurística.** `UnitFactionGroup("target")==nil` → "neutral" (delt CDF blueprint): puede aplicar "neutral" cuando no hay target; en zone neutral real (sin API explícita confirmada) no se aplica la tier. Arlo comparar visualmente en AH y setear `settings.ahTierOverride = "neutral"` si aplica.
 2. **Confidence "high" interpretativa.** Ver D-05: el Caso 4 del blueprint es imposible con las reglas literales; elegimos semantics: `high = baitExcluded OR (usable>=minListings AND volume>=minVolume)`; `medium = usable>=3`.
-3. **verify_math.py**: value-given outputs anteriores (se conserva en este log, archivo eliminado).
+3. **verify_math.py**: salida del script conservada en §3 (archivo eliminado del árbol).
 4. **TooltipDataProcessor.AddTooltipPostCall**: dispatch modern definida en 12.x; versionado defensivo (`Enum.TooltipDataType.Item`).
-5. **`sellPrice` paraquick scan**: usamos `consensus.price` (mediana), `buyPrice` = mediana de tiers restantes (tras bait). Formuladores de ROI están acotadas al modelo entendido.
-6. **UI**: ninguna validación visual real (sin cliente corriendo); layout estático posible diferencia de plan (altura hrows ~92px ≈ 3 filas).
+5. **`sellPrice` para quick scan**: usamos `consensus.price` (mediana), `buyPrice` = mediana de tiers restantes (tras bait). Fórmulas de ROI acotadas al modelo entendido.
+6. **UI**: ninguna validación visual real (sin cliente corriendo); layout estático posible diferencia de plan (altura de filas ~92px ≈ 3 filas).
 7. **Commodity flow modern**: `RefreshCommoditySearchResults` + `GetNumCommoditySearchResults` + `GetCommoditySearchResultInfo` — ser vice bendición (wowlua "implemented"; doc Blizzard). Fallback viejo pcall.
 
 ---
