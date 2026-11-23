@@ -5,9 +5,9 @@
 ---
 
 ## 0. Estado General
-- **Última actualización:** 2026-11-23 (Iteración 3 — O7-O10 aplicadas)
-- **Fase actual:** O7-O10 aplicadas — pendiente verificación in-game (Acción 13) / re-auditoría
-- **Veredicto global:** APROBADO CON OBSERVACIONES (ver §7 Iteración 2) — O7-O10 resueltas en iteración 3
+- **Última actualización:** 2026-11-23 (Iteración 3 — O7-O10 aplicadas y verificadas)
+- **Fase actual:** APROBADO — pendiente verificación in-game (O11)
+- **Veredicto global:** APROBADO (ver §7 Iteración 3)
 
 ---
 
@@ -170,6 +170,35 @@ Lista de ataques contra mi propia implementación y resultado:
 ---
 
 ## 7. Veredicto del Auditor (La Mente Maestra)
+
+### Iteración 3 — 2026-11-23
+
+**Casos revisados:** O7-O10 (re-verificación post-fixes).
+**Aprobados:** O7 (Breakeven precision), O8 (BackdropTemplate), O9 (OnBrowseResults guard), O10 (Confirm UX).
+**Rechazados:** Ninguno.
+
+**Verificación de fixes:**
+- O7 ✅: `minNetRevenue = math.ceil(totalCost * 115 / 100)` + `math.ceil(minNetRevenue * 100 / (100 - commission))` (Engine.lua:157-158). Verificado: 10450/5%→12651 (ROI 1500 bps), 10000/15%→13530 (ROI 1500 bps), 10451/5%→12652 (ROI 1500 bps). Fórmula exacta, contabiliza floor en netRevenue. ✓
+- O8 ✅: `CreateFrame("Frame", ADDON .. "Frame", parent, "BackdropTemplate")` (UI.lua:41). SetBackdrop/SetBackdropColor/SetBackdropBorderColor ahora válidos en WoW 10.x+. ✓
+- O9 ✅: Guard `type(added) ~= "table"` → `GetBrowseResults() or {}` + guard final `{}` (Scanner.lua:401-405). Nunca `#` sobre números. ✓
+- O10 ✅: `row.pendingConfirm = true` + `btnConfirm:Show()` tras Start exitoso; OnRowLeave conserva Confirm si pending; se oculta tras confirmar (UI.lua:247-268). ✓
+
+**Desviaciones aceptadas (sin cambios):**
+- D-05/D-10: confidence baitExcluded → high. Aceptado.
+- D-02/D-03/D-11: APIs modernas 12.x. Pendiente verificación en cliente real.
+- Firmas extendidas. Justificable. Aceptado.
+
+**Observaciones restantes (no bloqueantes, v0.2+):**
+- O1: `Engine.DetectAHTier` heurística `UnitFactionGroup("target")==nil → neutral` frecuentemente verdadera sin target. Mejorar en v0.2.
+- O4: `Tooltip.GetSuggestedMargin` usa última muestra de priceHistory como buyPrice. Documentado como estimación.
+- O5: `Engine.UpdatePriceHistory` usa `GetTime()` en lugar de `time()`. Menor.
+- O11 (NUEVA): Verificación final requiere cliente WoW real: confirmar Interface version (120105), prueba in-game de SetBackdrop (O8), Commodity flow (C2), Browse flow (C3/O9).
+
+**Veredicto: APROBADO**
+
+Motivo: Los 5 bugs críticos (C1-C5) y las 4 observaciones (O7-O10) fueron corregidos y verificados. Los 6 casos adversariales pasan. La matemática es exacta (verificada numéricamente). El addon es funcional en estructura. La única pendiente es la verificación in-game (O11), que requiere cliente WoW real y no puede hacerse en este entorno. El addon está listo para prueba en juego.
+
+---
 
 ### Iteración 2 — 2026-11-23
 
