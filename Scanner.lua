@@ -30,6 +30,15 @@ local function OnScanEvent(self, event, ...)
     if type(a) == "table" then Scanner.OnItemResults(a) end
   elseif event == "ITEM_DATA_LOAD_RESULT" then
     if type(a) == "number" then Scanner.OnItemDataLoad(a, select(2, ...)) end
+  elseif event == "AUCTION_HOUSE_BROWSE_RESULTS_ADDED" then
+    -- C3: Category Scan wired a eventos de browse (gating running+mode)
+    if Scanner.state.running and Scanner.state.mode == "category" then
+      Scanner.OnBrowseResults(a)
+    end
+  elseif event == "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED" then
+    if Scanner.state.running and Scanner.state.mode == "category" then
+      Scanner.OnBrowseResultsUpdated()
+    end
   end
 end
 scanEvents:SetScript("OnEvent", OnScanEvent)
@@ -37,6 +46,7 @@ local scanEvts = {
   "COMMODITY_SEARCH_RESULTS_ADDED", "COMMODITY_SEARCH_RESULTS_UPDATED",
   "ITEM_SEARCH_RESULTS_ADDED", "ITEM_SEARCH_RESULTS_UPDATED",
   "ITEM_DATA_LOAD_RESULT",
+  "AUCTION_HOUSE_BROWSE_RESULTS_ADDED", "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED",
 }
 for _, ev in ipairs(scanEvts) do
   if _G[ev] then scanEvents:RegisterEvent(ev) end
@@ -215,7 +225,14 @@ end
 function Scanner.OnItemDataLoad(itemID, success)
   if not (success == true and itemID) then return end
   if not Scanner.state.running then return end
-  Scanner.EvaluateItem(itemID, Scanner.GetScanResults(itemID))
+  -- M3: key estable y fresca (no depender de state.itemKey de otro ítem)
+  local results
+  if Engine.IsCommodity(itemID) then
+    results = Scanner.ReadCommodityResults(itemID)
+  else
+    results = Scanner.ReadItemSearchResults(Engine.MakeItemKey(itemID))
+  end
+  Scanner.EvaluateItem(itemID, results)
 end
 
 function Scanner.EvaluateItem(itemID, results)
@@ -378,13 +395,19 @@ end
 -- ------------------------------------------------------------------
 function Scanner.OnBrowseResults(addedBrowseResults)
   local st = Scanner.state
-  if not (st and st.running) then return end
+  if not (st and st.running and st.mode == "category") then return end
   local added = addedBrowseResults or (_G.C_AuctionHouse and _G.C_AuctionHouse.GetBrowseResults() or {})
   local appended = 0
   for i = 1, #added do
     local r = added[i]
-    if r and type(r.itemID) == "number" and r.itemID > 0 then
-      st.browseQueue[#st.browseQueue + 1] = r.itemID
+    -- C3: BrowseResultInfo moderno trae itemKey (no itemID); soportamos ambos.
+    local id
+    if r then
+      id = r.itemID
+      if type(id) ~= "number" and r.itemKey then id = r.itemKey.itemID end
+    end
+    if type(id) == "number" and id > 0 then
+      st.browseQueue[#st.browseQueue + 1] = id
       appended = appended + 1
     end
   end

@@ -55,6 +55,15 @@ Patrón verificado en LibAHTab + WoWInterface forums: `CreateFrame("Button", nam
 ### D-08: AH Tier
 Chain del blueprint implementado: `ahTierOverride` → API (defensivo, `GetHouseFactionID()==0`) → `UnitFactionGroup("target")==nil` → `"neutral"` → `"faction"`. NOTA: UnitFactionGroup("target")==nil es frequentmente verdadero (no hay target) → tier neutro frequentemente. Ver riesgo §5.
 
+### D-09: Firmas extendidas (compatibles con el contrato)
+`Engine.GetConsensusPrice(results, settings, itemID)`: 3er parámetro opcional para detección de anomalías contra `priceHistory` (§4.7). `Engine.ComputeDepositCost(itemID, tier)`: 2do parámetro opcional de tier. Las firmas del contrato §5 siguen siendo válidas con 2 y 1 args respectivamente. Aceptado por el Auditor (Iteración 1).
+
+### D-10: Confidence — baitExcluded → "high" (formaliza D-05)
+Regla implementada: `high` si `baitExcluded > 0` O (`usable >= minListings` Y `totalQty >= minVolume`); `medium` si `usable >= 3`; `low` resto. Resuelve la contradicción interna del blueprint: Caso 4 exige `confidence=="high"` con 1 solo tier usable tras excluir el bait. Aceptado por el Auditor (Iteración 1).
+
+### D-11: APIs modernas 12.x (formaliza D-02/D-03)
+Commodity: `RefreshCommoditySearchResults(itemID)` + `GetNumCommoditySearchResults`/`GetCommoditySearchResultInfo`, eventos `COMMODITY_SEARCH_RESULTS_ADDED/UPDATED`. Ítems: `SendSearchQuery(itemKey, {}, false)` + `GetNumItemSearchResults`/`GetItemSearchResultInfo`, eventos `ITEM_SEARCH_RESULTS_ADDED/UPDATED`, fallback pcall a `RequestItemSearchResults`. Browse: `SendBrowseQuery` + `RequestMoreBrowseResults`, eventos `AUCTION_HOUSE_BROWSE_RESULTS_ADDED/UPDATED` (C3, iteración 2), leyendo `BrowseResultInfo.itemKey.itemID` con fallback `r.itemID`. `Start/ConfirmCommoditiesPurchase` con 3er arg de precio (C2): versiones que lo ignoran confirman el precio vía `COMMODITY_PRICE_UPDATED`. Pendiente verificación en cliente real (Acción 13).
+
 ---
 
 ## 3. Matemática Financiera — Verificación (script verify_math.py — cobre entero)
@@ -78,15 +87,16 @@ Checks extra del script:
 
 ## 4. Casos Adversariales — Resultados
 
-### Caso 1 — Anti-Ban / Taint
+### Caso 1 — Anti-Ban / Taint — Iteración 2 (2026-11-23)
 - **Resultado:** PASS
-- **Evidencia:** `grep -r "SetAttribute"` → 0 matches; `hooksecurefunc` → 0; `OnUpdate` → 0. Composición de compras solo en `UI.lua:238 (StartCommoditiesPurchase)`, `UI.lua:245 (ConfirmCommoditiesPurchase)`, `UI.lua:253 (PlaceBid)` — todas dentro de handlers `OnClick` (hardware events). Frames creados propios (`CreateFrame`, incluye `WoWFlipsFrame`, `WoWFlipsFrameTab`, filas), parenteados a `AuctionHouseFrame` (no modify SecureTemplates). PanelTemplates_SetNumTabs llamado en el handler de AUCTION_HOUSE_SHOW.
-- **Verificación:** estática (sin cliente corriendo). Semántica del API: no se necesita SetAttribute ni hooks; no hay ningún handler que invoca APIs protegidas.
+- **Evidencia:** `grep -r "SetAttribute"` en `*.lua` → 0 matches; `hooksecurefunc` → 0; `OnUpdate` → 0. APIs de compra solo en `UI.lua`: `StartCommoditiesPurchase` (OnBuyCommodityClick, línea 246), `ConfirmCommoditiesPurchase` (OnConfirmCommodityClick, línea 253), `PlaceBid` (OnBuyItemBidClick) — todos handlers `OnClick` de botones propios (no secure templates, sin SetAttribute). C1 aplicado: `row.btnBuy.oppData = opp` / `row.btnConfirm.oppData = opp` (UI.lua:228-229) — datos en el botón, no en la fila. H7: panel `SetMovable(true)` + `RegisterForDrag("LeftButton")` — frame propio, sin taint.
+- **Verificación:** estática (sin cliente corriendo) + grep. La cadena funcional de compra queda operativa (ver Caso 2).
 
-### Caso 2 — Hardware Events (2 pasos commodity)
-- **Resultado:** PASS
-- **Evidencia:** Comprar commodity requiere 2 clics físicos: clic 1 → `UI.OnBuyCommodityClick` (UI.lua:234-239, OnClick) → `StartCommoditiesPurchase(opp.itemID, opp.buyQty)`; clic 2 → `UI.OnConfirmCommodityClick` (UI.lua:241-246, OnClick) → `ConfirmCommoditiesPurchase(opp.itemID, opp.buyQty)`. `ConfirmCommoditiesPurchase` nunca se invoca desde Scanner/Engine/eventos — solo desde OnClick del botón de Confirmar. grep evidencia: 6 matches, todos en UI.On*Click (ver grep del Caso 1).
-- **Verificación:** estática. scan (Quick/Category) no invoca Start/Confirm ni PlaceBid.
+### Caso 2 — Hardware Events (2 pasos commodity) — Iteración 2 (2026-11-23)
+- **Resultado:** PASS (funcional, verificación estática)
+- **Evidencia:** C1+C2 aplicados. Flujo: hover en fila (`UI.OnRowEnter`) revela `btnBuy`/`btnConfirm`; clic físico 1 → `UI.OnBuyCommodityClick(btn)` (OnClick) lee `btn.oppData` (C1) → `StartCommoditiesPurchase(opp.itemID, opp.buyQty or 1, opp.buyPrice)` (C2); clic físico 2 → `UI.OnConfirmCommodityClick(btn)` → `ConfirmCommoditiesPurchase(opp.itemID, opp.buyQty or 1, opp.buyPrice)`. `row.btnConfirm` nace oculto y solo se muestra en OnRowEnter — no hay invocación automática. grep `StartCommoditiesPurchase|ConfirmCommoditiesPurchase|PlaceBid`: solo UI.lua handlers OnClick, cero en Scanner/Engine/timers/eventos.
+- **Nota de cliente:** la firma documentada de 12.x usa 2 args (precio confirmado vía `COMMODITY_PRICE_UPDATED`); el 3er arg (precio) es requerido por la firma del blueprint y será ignorado por versiones que no lo aceptan. Mismatch de firma mitigado por `pcall`.
+- **Verificación:** estática. Sin cliente corriendo no se puede certificar la ejecución real; pendiente de prueba en juego.
 
 ### Caso 3 — Cierre abrupto de AH
 - **Resultado:** PASS
@@ -98,10 +108,10 @@ Checks extra del script:
 - **Evidencia:** `verify_math.py`: `Caso 4a: price=10000 baitExcluded=1 confidence=high (esperado del blueprint)`; `Caso 4b: price=1 baitExcluded=0 (esperado)`. Estado interno `consensus.tiers.start=2` para 4a (excluye {1,1}).
 - **Verificación:** replicación exacta del algoritmo de `Engine.GetConsensusPrice`.
 
-### Caso 5 — GetItemInfo caché fría
+### Caso 5 — GetItemInfo caché fría — Iteración 2 (2026-11-23)
 - **Resultado:** PASS
-- **Evidencia:** `Engine.GetFinancials`: `GetItemInfo(itemID)` nil → `Engine.RequestItemLoad(itemID)` (pcall `C_Item.RequestLoadItemDataByID`) → return nil; no deref. `UI.AddOpportunity:193`: `GetItemInfo(opp.itemID) or tostring(opp.itemID)` (no `select(1, ...)` sobre nil). `Engine.ComputeTotalCost` → `ComputeDepositCost` nil → return nil. `Engine.IsOpportunity` → roiBPS nil → `no_cost_data`. `ITEM_DATA_LOAD_RESULT` → `Scanner.OnItemDataLoad(itemID, success)` → re-evaluación. Caso vendorSellPrice=0: depositPer=floor(0*15/100)=0; failed=2 → depositCost=0 → no crash.
-- **Verificación:** estática + replica de Engine.
+- **Evidencia:** `Engine.GetFinancials` captura todos los returns con `local info = { GetItemInfo(itemID) }`; `if not info[1]` → `RequestItemLoad` (pcall `C_Item.RequestLoadItemDataByID`) → nil. Sin `select()` sobre un único valor. Diferidos: `ITEM_DATA_LOAD_RESULT` → `Scanner.OnItemDataLoad` usa `Engine.MakeItemKey(itemID)` fresca (M3) y reevalúa. Tooltip C5: `data.id` → `data.itemID` → `tooltip:GetItem()` (solo si `type == "number"`). C4 verificado numéricamente: `math.ceil(totalCost*115/(100-commission))` → totalCost=10450/comm 5% → breakeven=12650, ROI=1500 bps; totalCost=10000/comm 15% → 13530, ROI=1500 bps; totalCost=10451 → 12652 (ceiling garantiza >=1500). `vendorSellPrice=0`: depositPer=floor(0*15/100)=0; failed=2 → depositCost=0 → no crash.
+- **Verificación:** estática + replicación numérica.
 
 ### Caso 6 — Repo GitHub limpio
 - **Resultado:** PASS
@@ -131,8 +141,8 @@ Checks extra del script:
 
 Lista de ataques contra mi propia implementación y resultado:
 
-1. **Nil deref — Engine.GetFinancials(itemID) sin info.** Mitigación: `if not info then Engine.RequestItemLoad(itemID); return nil end`. Resultado: PASS estático. (Añadido Check: `GetItemInfo(opp.itemID) or tostring` en UI:193 tras bug detectado en re-lectura.)
-2. **Nil deref — Engine.IsCommodity(nil).** Guard: `type(itemID) ~= "number" or itemID <= 0` → false. PASS.
+1. **Nil deref — Engine.GetFinancials(itemID) sin info.** Re-ejecutado iteración 2: captura `{ GetItemInfo(itemID) }`; `if not info[1]` → `RequestItemLoad` + nil; `tonumber(info[11]/info[12])` sin deref. `UI.AddOpportunity` usa `GetItemInfo(opp.itemID) or tostring(...)`. PASS.
+2. **Nil deref — Engine.IsCommodity(nil).** Re-ejecutado iteración 2: `type(itemID) ~= "number" or itemID <= 0` → false; heurística con `{ GetItemInfo }` + guard `info[1]`. PASS.
 3. **Nil deref — GetConsensusPrice(nil).** `type(results) == "table"` guard. PASS.
 4. **Nil deref — IsOpportunity sin consensus.** branch `not consensus or type(consensus.price) ~= "number"` → no_consensus. PASS.
 5. **Nil deref — ComputeROI(buy=nil, sell=nil).** Type guards → nil. PASS.
@@ -140,14 +150,14 @@ Lista de ataques contra mi propia implementación y resultado:
 7. **Nil deref — Engine.DetectAHTier sin AH.** API defensivo + UnitFactionGroup defensivo. PASS.
 8. **Nil deref — Scanner EvaluateItem st.maxCap[itemID] / consensus.tiers.list[].** minFields: GetConsensusPrice siempre crea tiers; EvaluateItem guarda `consensus.tiers.list[consensus.tiers.start]`. PASS.
 9. **Nil deref — StopScan sin temporizadores.** Cancela si tienen Cancel; los closures con `if st.running` suelto. PASS.
-10. **Race condition — Cerrar AH a mitad de Quick Scan.** Protecciones en ProcessNext/AdvanceQuickScan/OnTimeout/EvaluateItem. St.running=false → return. Timers resueltos. PASS.
+10. **Race condition — Cerrar AH a mitad de Quick Scan.** Re-ejecutado iteración 2: `StopScan` limpia pending/timers/queue; `ProcessNext`/`AdvanceQuickScan`/`OnTimeout`/`EvaluateItem` guardan `st.running`; los nuevos handlers de browse (C3) exigen además `st.mode == "category"` — al cerrar AH (mode=nil, running=false) no procesan nada. PASS.
 11. **Race condition — Item key asíncrono.** `ReadItemSearchResults(key)` inválido si key no tiene campo — OnItemResults verifica `st.pending == itemID or st.mode == "category"`; pending siempre seteado en RequestCurrent. PASS.
 12. **Taint — Scanner como event handlers llaman Start/Confirm/PlaceBid?** grep evidence: 0 coincidencias en Scanner/Engine/UI (solo en OnClick handlers UI). PASS.
-13. **Throttle — timeout 10s, backoff x2 cap 8s, MAX_RETRIES=1.** Verificado en code. PASS.
-14. **Bait extremo — múltiples tiers de 1 unidad.** Implementación exclusión solo tier[1] (condición exacta del blueprint); mediana sobre resto. Documentado. PASS estática.
+13. **Throttle — timeout 10s, backoff x2 cap 8s, MAX_RETRIES=1.** Re-ejecutado iteración 2: sin cambios; el dispatch de browse también respeta `MIN_INTERVAL_CATEGORY` (1.0s) y una página por evento. PASS.
+14. **Bait extremo — múltiples tiers de 1 unidad.** Re-ejecutado iteración 2: réplica python del algoritmo (Caso 4a/4b) sin cambios; exclusión de tier[1] con condición exacta del blueprint y mediana ponderada sobre el resto. PASS.
 15. **Caché fría simultánea — 5 ítems nuevos en Quick Scan.** ProcessNext secuencial con pending guard + defer en ITEM_DATA_LOAD_RESULT. PASS estática.
 16. **Overflow de bps — precios 2^31.** python replica: totalCost=2147484098, roiBPS=-500, no error. PASS.
-17. **maxCapCobre.** EvaluateItem: si `consensus.price > st.maxCap[itemID]` → buyPrice=nil → no opp. Implementado. Documentado en el entry. PASS estática.
+17. **maxCapCobre.** Re-ejecutado iteración 2: `EvaluateItem` descarta (`buyPrice=nil`) si `consensus.price > st.maxCap[itemID]`; `maxCap` se pobla en `StartQuickScan` desde el wishlist. PASS.
 18. **Bait + quickly selling — buyPrice nil when all tiers bait.** GetConsensusPrice devuelve nil → no opp (reason no_consensus). PASS estática.
 19. **Bug — Engine.GetFinancials: `local info = GetItemInfo(itemID)` capturaba SOLO el primer return (itemName, string) → `tonumber(select(11, info))` siempre nil → `GetFinancials` siempre devolvía nil → ROI nunca calculado.** FIX: `local info = { GetItemInfo(itemID) }` (captura TODOS los returns; contrato select(11)/select(12)) + `info[11]/info[12]` + guard `if not info[1]` → defer + nil. Mismo fix en `Engine.IsCommodity` (heurística). Bug detectado en re-lectura de Engine.lua. PASS estática.
 20. **Bug — `break` sobre la misma línea sin separador.** Engine.lua:219 `if acc * 2 >= totalQty then median = tiers[i].price break end` → `; break` (Lua 5.1 exige separadores entre statements en la misma línea). FIX aplicado. PASS estática.
@@ -155,9 +165,66 @@ Lista de ataques contra mi propia implementación y resultado:
 ---
 
 ## 7. Veredicto del Auditor (La Mente Maestra)
-- (pendiente)
+
+### Iteración 1 — 2026-11-23
+
+**Casos revisados:** 1-6 (estáticos + replica Python para Caso 4).
+**Aprobados:** Caso 3 (cierre abrupto), Caso 4 (bait), Caso 6 (repo GitHub).
+**Rechazados (con motivo):**
+- Caso 1 (Anti-Ban/Taint): PASS estático, pero depende de C1/C2 para validación funcional → no se puede certificar hasta que los botones de compra funcionen.
+- Caso 2 (Hardware Events 2 pasos): **FAIL funcional** — los botones de compra no propagan `oppData` (C1) y faltan parámetros de precio (C2). La estructura de hardware events es correcta, pero la compra no se ejecuta.
+- Caso 5 (Caché fría): PASS estático, pero `Tooltip.GetSuggestedMargin` usa `ComputeBreakeven(0, ...)` (C4) → margen incorrecto.
+
+**Bugs críticos detectados (C1-C5):**
+1. **C1 — UI buy buttons non-functional**: `row.oppData = opp` se setea en la fila, pero `row.btnBuy`/`row.btnConfirm` son botones hijos cuyo `.oppData` nunca se asigna. `UI.OnBuyCommodityClick(btn)` lee `btn.oppData` → nil → return silencioso. **Las compras no funcionan.**
+2. **C2 — Missing price in commodity purchase APIs**: `StartCommoditiesPurchase(itemID, quantity, unitPrice)` y `ConfirmCommoditiesPurchase(itemID, quantity, unitPrice)` requieren el precio unitario. El código pasa solo 2 args. FIX: pasar `opp.buyPrice`.
+3. **C3 — Category Scan not wired to events**: `Scanner.OnBrowseResults` y `Scanner.OnBrowseResultsUpdated` existen pero nunca se registran en `AUCTION_HOUSE_BROWSE_RESULTS_ADDED`/`_UPDATED`. El Category Scan envía la query pero nunca procesa resultados. **Modo completamente no funcional.**
+4. **C4 — Engine.ComputeBreakeven wrong formula**: Actual `totalCost * 100 / (100 - commission)` da ROI ≥ 0%. El blueprint exige ROI ≥ 15%: `totalCost * 115 / (100 - commission)` (con ceiling para garantizar umbral).
+5. **C5 — Tooltip data field**: `data.itemID` no existe en TooltipData moderno; el campo correcto es `data.id`. El fallback a `tooltip:GetItem()` puede devolver un link (string), no un número.
+
+**Desviaciones aceptadas (con observación):**
+- D-05 (confidence: baitExcluded → high): resolución razonable de contradicción interna del blueprint (Caso 4). Documentar en §2.
+- D-02/D-03 (APIs modernas 12.x): desviación necesaria por cambio de API. Documentada. Verificar en cliente real.
+- Engine.GetConsensusPrice/ComputeDepositCost firmas extendidas con params extra: justificable (itemID para anomalía, tier para depósito). Documentar.
+
+**Observaciones (no bloqueantes):**
+- O1: `Engine.DetectAHTier` heurística `UnitFactionGroup("target")==nil → neutral` es frecuentemente verdadera sin target. Mejorar en v0.2.
+- O2: `UI.OnQuickScanClick`/`OnStopScanClick` deshabilitan botones tras detener scan (impide reinicio). FIX en C1-C5 batch.
+- O3: `UI.panel` falta `SetMovable(true)`.
+- O4: `Tooltip.GetSuggestedMargin` usa buyPrice=0 (solo depósito). Documentar como estimación conservadora.
+- O5: `Engine.UpdatePriceHistory` usa `GetTime()` (relativo) en lugar de `time()` (epoch). Menor.
+- O6: `Engine.ToGoldString` muestra "0 plata" cuando gold=0 y copperRem=0. Cosmético.
+
+**Veredicto: RECHAZADO**
+
+Motivo: 5 bugs críticos (C1-C5) impiden que el addon funcione (compras no operativas, Category Scan no funcional, margen incorrecto, tooltip roto). El código base es sólido y bien documentado, pero no se puede aprobar hasta corregir los críticos. Casos adversariales 3, 4 y 6 pasan; 1, 2 y 5 requieren re-verificación tras los fixes.
 
 ---
 
 ## 8. Acciones Requeridas por el Auditor
-- (pendiente)
+
+### Estado — Iteración 2 (2026-11-23)
+Todas las acciones críticas y altas fueron aplicadas en el batch `fix: C1-C5 critical bugs + H6/H7/M3`.
+
+### Críticos (bloquean aprobación) — COMPLETADAS
+1. **C1 — Propagar oppData a botones de compra** (`UI.lua`) — ✅ COMPLETADA: `row.btnBuy.oppData = opp` y `row.btnConfirm.oppData = opp` en `UI.AddOpportunity` (UI.lua:228-229).
+2. **C2 — Pasar precio unitario a APIs de commodity** (`UI.lua`) — ✅ COMPLETADA: `StartCommoditiesPurchase(itemID, qty, opp.buyPrice)` y `ConfirmCommoditiesPurchase(itemID, qty, opp.buyPrice)` (3er arg, pcall defensivo).
+3. **C3 — Registrar eventos de browse** (`Scanner.lua`) — ✅ COMPLETADA: `AUCTION_HOUSE_BROWSE_RESULTS_ADDED`/`_UPDATED` registrados en `Scanner.scanEvents`; despacho con gating `st.running and st.mode == "category"`; soporte de `BrowseResultInfo.itemKey.itemID`. Sin esto Category Scan no procesaría nada.
+4. **C4 — Corregir ComputeBreakeven** (`Engine.lua`) — ✅ COMPLETADA: `math.ceil(totalCost * 115 / (100 - commission))`; verificado ROI=1500 bps en breakeven (10450/5%→12650; 10000/15%→13530; 10451→12652). `Tooltip.GetSuggestedMargin` usa última muestra de priceHistory como buyPrice; fallback 0 (estimación conservadora).
+5. **C5 — Corregir campo de itemID en Tooltip** (`Tooltip.lua`) — ✅ COMPLETADA: `data.id` → `data.itemID` → `tooltip:GetItem()`, con verificación `type == "number"`.
+
+### Altos (recomendados antes de re-submit) — COMPLETADOS
+6. **H6 — Re-habilitar botones tras StopScan** (`UI.lua`) — ✅ COMPLETADA: `UI.SetScanButtonsEnabled(true)` en `OnQuickScanClick` rama stop y `OnStopScanClick`.
+7. **H7 — Hacer panel movible** (`UI.lua`) — ✅ COMPLETADA: `SetMovable(true)`, `SetClampedToScreen(true)`, `RegisterForDrag("LeftButton")`, `OnDragStart`/`OnDragStop`.
+8. **M3 — itemKey estable en OnItemDataLoad** (`Scanner.lua`) — ✅ COMPLETADA: usa `Engine.MakeItemKey(itemID)` fresca (commodity → lectura directa).
+9. **H5 — Mejorar detección de AH neutro** (`Engine.lua`) — ✅ DOCUMENTADA: limitación en §5; `settings.ahTierOverride` como solución manual (ya existente).
+
+### Documentación — COMPLETADA
+10. §2 actualizada con D-09, D-10, D-11 — ✅.
+11. Casos 1, 2, 5 re-ejecutados y reportados en §4 con evidencia actualizada — ✅.
+12. Auto-auditoría §6 re-ejecutada (items 1, 2, 10, 13, 14, 17) — ✅.
+
+### Verificación de interfaz — PARCIAL
+13. `## Interface: 120105` — verificado contra fuentes públicas (warcraft.wiki "Getting the current interface number": Retail 12.1.5 = 120105; wowlua API up-to-date PTR 12.1.5, Aug 28 2026). ⚠️ Pendiente `/dump (select(4, GetBuildInfo()))` en el cliente real del usuario — no disponible en este entorno.
+
+**Re-sometido a revisión del Auditor.** No se marca como terminado hasta APROBADO en §7.

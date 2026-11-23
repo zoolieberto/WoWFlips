@@ -17,9 +17,15 @@ end
 -- ------------------------------------------------------------------
 function Tooltip.OnTooltipSetItem(tooltip, data)
   if not tooltip or type(tooltip.AddLine) ~= "function" then return end
-  local itemID = tooltip:GetItem()
-  if type(itemID) ~= "number" and data then
-    if type(data.itemID) == "number" then itemID = data.itemID end
+  -- C5: TooltipData moderno usa data.id; fallback data.itemID y luego tooltip:GetItem()
+  local itemID
+  if data then
+    if type(data.id) == "number" then itemID = data.id
+    elseif type(data.itemID) == "number" then itemID = data.itemID end
+  end
+  if type(itemID) ~= "number" then
+    local got = tooltip:GetItem()
+    if type(got) == "number" then itemID = got end
   end
   if type(itemID) ~= "number" or itemID <= 0 then return end
 
@@ -53,5 +59,16 @@ function Tooltip.AddHistoryLines(tooltip, itemID)
 end
 
 function Tooltip.GetSuggestedMargin(itemID)
-  return Engine.ComputeBreakeven(0, itemID, Engine.GetAHTier())
+  -- C4: usar buyPrice real (última muestra de priceHistory) si existe; si no,
+  -- estimación conservadora basada solo en depósito (buyPrice=0).
+  local buyPrice = 0
+  local realm = Core.GetRealmDB()
+  local hist = realm and realm.priceHistory and realm.priceHistory[itemID]
+  if hist and type(hist.samples) == "table" then
+    local last = hist.samples[#hist.samples]
+    if last and type(last.price) == "number" and last.price > 0 then
+      buyPrice = last.price
+    end
+  end
+  return Engine.ComputeBreakeven(buyPrice, itemID, Engine.GetAHTier())
 end

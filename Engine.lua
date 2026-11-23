@@ -151,7 +151,9 @@ function Engine.ComputeBreakeven(buyPriceCopper, itemID, tier)
   local totalCost = Engine.ComputeTotalCost(buyPriceCopper, itemID, tier)
   if not totalCost or totalCost <= 0 then return nil end
   local commission = Engine.GetCommissionRate(tier)
-  return math.floor(totalCost * 100 / (100 - commission))
+  -- C4: precio mínimo de venta para ROI >= 15% (115 = 100% costo + 15% ROI; ceil
+  -- garantiza el umbral). math.ceil siempre produce entero representable.
+  return math.ceil(totalCost * 115 / (100 - commission))
 end
 
 -- ------------------------------------------------------------------
@@ -362,6 +364,7 @@ end
 function Engine.ToGoldString(copper)
   if type(copper) ~= "number" then return "0 cobre" end
   copper = math.max(0, math.floor(copper))
+  if copper == 0 then return "0 cobre" end -- O6: sin "0 plata"
   local gold = math.floor(copper / Engine.COPPER_PER_GOLD)
   local silver = math.floor((copper - gold * Engine.COPPER_PER_GOLD) / Engine.COPPER_PER_SILVER)
   local copperRem = copper % Engine.COPPER_PER_SILVER

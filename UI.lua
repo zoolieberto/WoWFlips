@@ -50,8 +50,11 @@ function UI.Create()
   panel:SetBackdropColor(0.05, 0.05, 0.10, 0.95)
   panel:SetBackdropBorderColor(0.25, 0.25, 0.30, 1)
   panel:EnableMouse(true)
-  panel:SetScript("OnMouseDown", function(self, button) if button == "LeftButton" then self:StartMoving() end end)
-  panel:SetScript("OnMouseUp", function(self, button) if button == "LeftButton" then self:StopMoving() end end)
+  panel:SetMovable(true) -- H7
+  panel:SetClampedToScreen(true)
+  panel:RegisterForDrag("LeftButton")
+  panel:SetScript("OnDragStart", function(self) self:StartMoving() end)
+  panel:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
 
   -- Título
   local title = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -221,6 +224,9 @@ function UI.AddOpportunity(opp)
     row.btnBuy:SetPoint("RIGHT", row, "RIGHT", -4, -2)
     row.btnBuy:SetScript("OnClick", function(self, button) if button == "LeftButton" then UI.OnBuyItemBidClick(self) end end)
   end
+  -- C1: los handlers reciben el botón (self); los datos del opp deben vivir EN cada botón.
+  row.btnBuy.oppData = opp
+  if row.btnConfirm then row.btnConfirm.oppData = opp end
 
   row:SetScript("OnEnter", function(self) UI.OnRowEnter(self) end)
   row:SetScript("OnLeave", function(self) UI.OnRowLeave(self) end)
@@ -234,14 +240,17 @@ function UI.OnBuyCommodityClick(btn)
   local opp = btn and btn.oppData
   local C = _G.C_AuctionHouse
   if not (opp and C and type(C.StartCommoditiesPurchase) == "function") then return end
-  pcall(C.StartCommoditiesPurchase, opp.itemID, opp.buyQty or 1)
+  -- C2: precio unitario como 3er argumento (blueprint). En 12.x el precio se
+  -- confirma vía COMMODITY_PRICE_UPDATED; el arg extra es ignorado por versiones
+  -- que no lo aceptan, y requerido por las que sí.
+  pcall(C.StartCommoditiesPurchase, opp.itemID, opp.buyQty or 1, opp.buyPrice)
 end
 
 function UI.OnConfirmCommodityClick(btn)
   local opp = btn and btn.oppData
   local C = _G.C_AuctionHouse
   if not (opp and C and type(C.ConfirmCommoditiesPurchase) == "function") then return end
-  pcall(C.ConfirmCommoditiesPurchase, opp.itemID, opp.buyQty or 1)
+  pcall(C.ConfirmCommoditiesPurchase, opp.itemID, opp.buyQty or 1, opp.buyPrice)
 end
 
 function UI.OnBuyItemBidClick(btn)
@@ -290,7 +299,7 @@ function UI.OnQuickScanClick()
   local st = Scanner.state
   if Scanner and Scanner.IsRunning() and st.mode == "quick" then
     Scanner.StopScan()
-    UI.SetScanButtonsEnabled(false)
+    UI.SetScanButtonsEnabled(true) -- H6: permitir reiniciar el scan
   else
     Scanner.StartQuickScan()
     UI.SetScanButtonsEnabled(true)
@@ -313,6 +322,6 @@ end
 
 function UI.OnStopScanClick()
   if Scanner then Scanner.StopScan() end
-  UI.SetScanButtonsEnabled(false)
+  UI.SetScanButtonsEnabled(true) -- H6: permitir reiniciar el scan
   UI.UpdateProgress("")
 end
