@@ -82,13 +82,13 @@ end
 
 function Engine.GetFinancials(itemID)
   if type(itemID) ~= "number" or itemID <= 0 then return nil end
-  local info = GetItemInfo(itemID)
-  if not info then
+  local info = { GetItemInfo(itemID) } -- capturamos TODOS los returns (contracto: select(11)/select(12))
+  if not info[1] then
     Engine.RequestItemLoad(itemID)
     return nil
   end
-  local vendorSellPrice = tonumber(select(11, info))
-  local classID = tonumber(select(12, info))
+  local vendorSellPrice = tonumber(info[11])
+  local classID = tonumber(info[12])
   if not vendorSellPrice and not classID then
     Engine.RequestItemLoad(itemID)
     return nil
@@ -216,7 +216,7 @@ function Engine.GetConsensusPrice(results, settings, itemID)
   local median = nil
   for i = start, #tiers do
     acc = acc + tiers[i].qty
-    if acc * 2 >= totalQty then median = tiers[i].price break end
+    if acc * 2 >= totalQty then median = tiers[i].price; break end
   end
   if not median then median = tiers[#tiers].price end
 
@@ -335,10 +335,10 @@ function Engine.IsCommodity(itemID)
     if type(v) == "number" then return v ~= 0 end
   end
   -- Heurística defensiva: commodities con stack>1 (Weapon=2 y Armor=3, Mount=17).
-  local info = GetItemInfo(itemID)
-  if not info then return false end
-  local classID = tonumber(select(12, info))
-  local maxStack = tonumber(select(8, info))
+  local info = { GetItemInfo(itemID) }
+  if not info[1] then return false end
+  local classID = tonumber(info[12])
+  local maxStack = tonumber(info[8])
   if type(classID) ~= "number" or type(maxStack) ~= "number" then return false end
   if classID == 2 or classID == 3 or classID == 17 then return false end
   return maxStack > 1
