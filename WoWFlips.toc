@@ -1,0 +1,12 @@
+## Interface: 120105
+## Title: WoWFlips
+## Notes: Escáner local de flips rápidos en la Casa de Subastas (AH moderna, C_AuctionHouse).
+## Author: Hugo Farfan
+## Version: 0.1.0
+## SavedVariables: WoWFlipsDB
+
+Core.lua
+Engine.lua
+Scanner.lua
+UI.lua
+Tooltip.lua

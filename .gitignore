@@ -1,0 +1,14 @@
+# SavedVariables / WTF (nunca commitear datos de usuario)
+WTF/
+# Backups y temporales
+*.bak
+*.tmp
+*.log
+# OS
+.DS_Store
+Thumbs.db
+# Editores
+.vscode/
+.idea/
+```<|end|><|start|>write to=assistant<|channel|>analysis <|constrain|>xml<|message|><rfl:parameter name="path">
+C:\Users\User\Desktop\Archivo casa la Pradera\Hugo Farfan\WoWFLips\README.md
