@@ -119,22 +119,49 @@ function UI.CreateTab()
   local frame = _G.AuctionHouseFrame
   if not frame then return end
   UI.tabCreated = true
+
+  -- Buscar el último tab existente (frame.Tabs puede no existir en Forever)
+  local lastTab = nil
+  if type(frame.Tabs) == "table" and #frame.Tabs > 0 then
+    lastTab = frame.Tabs[#frame.Tabs]
+  else
+    -- Fallback: iterar hijos del frame buscando botones con SetID
+    for _, child in ipairs({frame:GetChildren()}) do
+      if child and type(child.GetID) == "function" and child:GetID() and child:GetID() > 0 then
+        if not lastTab or child:GetID() > lastTab:GetID() then
+          lastTab = child
+        end
+      end
+    end
+  end
+
   local tab = CreateFrame("Button", ADDON .. "Tab", frame, "AuctionHouseFrameTabTemplate")
   tab:SetText("WoWFlips")
+  tab:EnableMouse(true)
   frame.numTabs = (frame.numTabs or 3) + 1
   tab:SetID(frame.numTabs)
-  PanelTemplates_SetNumTabs(frame, frame.numTabs)
-  local lastTab = frame.Tabs and frame.Tabs[#frame.Tabs]
+  if PanelTemplates_SetNumTabs then
+    pcall(PanelTemplates_SetNumTabs, frame, frame.numTabs)
+  end
   if lastTab then
     tab:SetPoint("TOPLEFT", lastTab, "TOPRIGHT", -15, 0)
   else
     tab:SetPoint("TOPLEFT", frame, "TOPLEFT", 6, -20)
   end
   tab:Show()
-  tab:SetScript("OnClick", function(self)
-    PanelTemplates_SetTab(frame, self:GetID())
+
+  -- OnClick robusto: usar PanelTemplates_TabOnClick si existe, sino handler manual
+  local function onClick(self)
+    if PanelTemplates_SetTab then
+      pcall(PanelTemplates_SetTab, frame, self:GetID())
+    end
     local p = UI.Create()
     if p then p:Show() end
+  end
+  tab:SetScript("OnClick", onClick)
+  -- También registrar en OnMouseUp por si OnClick no dispara en Forever
+  tab:SetScript("OnMouseUp", function(self, button)
+    if button == "LeftButton" then onClick(self) end
   end)
 end
 
