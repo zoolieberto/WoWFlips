@@ -149,6 +149,8 @@ Lista de ataques contra mi propia implementación y resultado:
 16. **Overflow de bps — precios 2^31.** python replica: totalCost=2147484098, roiBPS=-500, no error. PASS.
 17. **maxCapCobre.** EvaluateItem: si `consensus.price > st.maxCap[itemID]` → buyPrice=nil → no opp. Implementado. Documentado en el entry. PASS estática.
 18. **Bait + quickly selling — buyPrice nil when all tiers bait.** GetConsensusPrice devuelve nil → no opp (reason no_consensus). PASS estática.
+19. **Bug — Engine.GetFinancials: `local info = GetItemInfo(itemID)` capturaba SOLO el primer return (itemName, string) → `tonumber(select(11, info))` siempre nil → `GetFinancials` siempre devolvía nil → ROI nunca calculado.** FIX: `local info = { GetItemInfo(itemID) }` (captura TODOS los returns; contrato select(11)/select(12)) + `info[11]/info[12]` + guard `if not info[1]` → defer + nil. Mismo fix en `Engine.IsCommodity` (heurística). Bug detectado en re-lectura de Engine.lua. PASS estática.
+20. **Bug — `break` sobre la misma línea sin separador.** Engine.lua:219 `if acc * 2 >= totalQty then median = tiers[i].price break end` → `; break` (Lua 5.1 exige separadores entre statements en la misma línea). FIX aplicado. PASS estática.
 
 ---
 
